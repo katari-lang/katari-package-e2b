@@ -1,0 +1,11 @@
+{
+  "name": "katari-package-e2b",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "FFI sidecar dependencies for the Katari `e2b` package (src/e2b.ts).",
+  "dependencies": {
+    "@e2b/code-interpreter": "^1.5.0",
+    "@katari-lang/port": "0.1.0-rc7"
+  }
+}

@@ -1,0 +1,47 @@
+// A self-contained tool: run Python in an e2b sandbox. The sandbox is OWNED BY THE PROVIDER and shared
+// by every `run_python` call in its scope — a stateful kernel, so variables, imports, and files persist
+// across the model's steps (not a fresh process per call, which was what made the model's `soup`
+// disappear mid-turn). The low-level externals live in `e2b.ts`; the provider makes wiring it a
+// one-liner: `use e2b.provider(api_key = env.get_secret(key = "E2B_API_KEY"))`.
+
+@"Open a fresh e2b sandbox and return its session handle — the id every later `e2b_run_in` replays to
+reach the same sandbox. The api key never leaves the provider; it is passed straight to the sidecar."
+external agent e2b_open(api_key: string of private) -> string
+
+@"Run Python in the sandbox named by @session@ and return its stdout / value / error text. The sidecar
+reconnects to that sandbox — recreating it under the same handle if it has expired — so state from
+earlier calls in the same session is still there (only an actually-expired sandbox loses it)."
+external agent e2b_run_in(session: string, code: string, api_key: string of private) -> string
+
+@"Run Python in the ambient e2b session; the provider owns the session handle and threads it through.
+`run_python` is the tool an app hands to the model — this is the effect it performs."
+request e2b_run(code: string) -> string
+
+@"Provide an e2b session for the extent of the continuation: ONE sandbox, opened lazily on the first
+`run_python` and shared by every call after, so the model's steps build on each other's state. The
+session lives as long as this provider scope — wrap a single turn in its own `use e2b.provider(...)`
+for strict per-turn isolation."
+agent provider[R, effect E](
+  api_key: string of private,
+  continuation: agent (value: null) -> R with {...E, e2b_run},
+) -> R with E | io {
+  use handler (var session: string = "") {
+    request e2b_run(code: string) {
+      // Open the sandbox on first use, then reuse its handle for every later call in this scope.
+      if (session == "") {
+        let opened = e2b_open(api_key = api_key)
+        next e2b_run_in(session = opened, code = code, api_key = api_key) with { session = opened }
+      } else {
+        next e2b_run_in(session = session, code = code, api_key = api_key)
+      }
+    }
+  }
+  continuation(value = null)
+}
+
+@"Tool: execute Python code and return its output. Runs in a PERSISTENT sandbox shared across this
+conversation — variables, imports, and files you defined in earlier calls are still available, so build
+on them instead of repeating work. (If something you expected is missing, just define it again.)"
+agent run_python(code: string) -> string {
+  e2b_run(code = code)
+}

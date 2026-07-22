@@ -1,6 +1,6 @@
 [package]
 name = "e2b"
-version = "0.1.1"
+version = "0.1.2"
 description = "Run Python in a persistent e2b sandbox as a Katari tool. Ships an FFI sidecar (e2b.ts)."
 
 [runtime]

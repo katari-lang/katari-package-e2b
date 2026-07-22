@@ -50,15 +50,18 @@ agent succeeded(result: unknown) -> boolean {
 `session` request and shared by every `run_python` after, so the model's steps build on each other's state.
 The session lives as long as this provider scope — wrap a single turn in its own `use e2b.provider(...)` for
 strict per-turn isolation. A sandbox that cannot be opened raises `execution_error` here, at the provider's
-use site."
+use site. @source@ is a credential NAME (env key or oauth name), resolved at each `session` request, so a
+rotation lands on the next tool call without a restart."
 agent provider[R, effect E](
-  api_key: string of private,
+  source: credentials.source,
   continuation: agent (value: null) -> R with {...E, session},
-) -> R with E | io | prelude.throw[execution_error] {
+) -> R with E | io | prelude.throw[execution_error | env.missing_secret | oauth.server_error] {
   use handler (var current: string = "") {
     request session() {
-      // Open the sandbox on first use, then reuse its handle for every later request in this scope. A
-      // failed open raises `execution_error` rather than resuming, so it surfaces at the provider's use site.
+      // The credential resolves per request (freshness), the sandbox opens on first use, and its handle
+      // is reused for every later request in this scope. A failed open raises `execution_error` rather
+      // than resuming, so it surfaces at the provider's use site.
+      let api_key = credentials.resolve(source = source)
       let resolved = if (current == "") {
         let opened = e2b_open(api_key = api_key)
         if (succeeded(result = opened)) {
